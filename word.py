@@ -1,5 +1,5 @@
 import sys
-from collections import Counter
+from collections import Counter, defaultdict
 
 
 def get_word_list(filename="words.txt"):
@@ -26,13 +26,8 @@ def get_word_list(filename="words.txt"):
 def calculate_pattern(target, guess):
     """
     Calculates the Wordle color pattern for a guess against a target.
-    G = Green (correct letter, correct position)
-    Y = Yellow (correct letter, wrong position)
-    B = Black/Gray (incorrect letter)
+    G = Green, Y = Yellow, B = Black/Gray
     """
-    if len(target) != 5 or len(guess) != 5:
-        return None  # Invalid input
-
     pattern = ["B"] * 5
     target_counts = Counter(target)
 
@@ -40,49 +35,72 @@ def calculate_pattern(target, guess):
     for i in range(5):
         if guess[i] == target[i]:
             pattern[i] = "G"
-            # Decrement count for the matched letter
             target_counts[guess[i]] -= 1
 
     # 2. Second pass: Find Yellows (Y) and Blacks (B)
     for i in range(5):
-        # Skip if already marked as Green
         if pattern[i] == "G":
             continue
-
-        # Check if letter is in target and hasn't been fully used up
         if guess[i] in target_counts and target_counts[guess[i]] > 0:
             pattern[i] = "Y"
-            # Decrement count for the matched letter
             target_counts[guess[i]] -= 1
-        else:
-            pattern[i] = "B"  # Letter is not in target or all instances are used
 
     return "".join(pattern)
 
 
+def hamming_distance(s1, s2):
+    """Calculates the number of differing characters between two strings."""
+    return sum(c1 != c2 for c1, c2 in zip(s1, s2))
+
+
+def build_pattern_map(target_word, word_list):
+    """
+    Pre-calculates all possible patterns for a target word.
+    Returns a map: { "BGYBB": ["WORD1", "WORD2"], "GGGBB": ["WORD3"] }
+    """
+    pattern_map = defaultdict(list)
+    for guess_word in word_list:
+        pattern = calculate_pattern(target_word, guess_word)
+        pattern_map[pattern].append(guess_word)
+    return pattern_map
+
+
 def find_guesses_for_art(target_word, art_patterns, word_list):
     """
-    Searches the word_list to find a guess word for each art_pattern.
+    Finds guesses for art patterns and suggests alternatives if not found.
     """
-    print(f"Searching for guesses for target word: {target_word}\n")
-    found_guesses = []
+    print(f"Pre-calculating all possible patterns for target: {target_word}...")
+    # 1. Create the map of all possible patterns
+    possible_patterns_map = build_pattern_map(target_word, word_list)
+    print(f"Found {len(possible_patterns_map)} unique patterns.\n")
 
-    for pattern_to_find in art_patterns:
-        found_match = False
-        for guess_word in word_list:
-            # Calculate the pattern for this guess
-            result_pattern = calculate_pattern(target_word, guess_word)
+    results = []
 
-            # Check if it matches the pattern we're looking for
-            if result_pattern == pattern_to_find:
-                found_guesses.append(guess_word)
-                found_match = True
-                break  # Move to the next pattern
+    for requested_pattern in art_patterns:
+        # 2. Check if the exact pattern exists
+        if requested_pattern in possible_patterns_map:
+            # Found it!
+            guess = possible_patterns_map[requested_pattern][0]  # Get the first word
+            results.append({
+                "status": "found",
+                "requested": requested_pattern,
+                "guess": guess
+            })
+        else:
+            # 3. Not found. Time to find alternatives.
+            alternatives = {}
+            # We search for patterns with a Hamming distance of 1 (off-by-one)
+            for possible_pattern, guess_list in possible_patterns_map.items():
+                if hamming_distance(requested_pattern, possible_pattern) == 1:
+                    alternatives[possible_pattern] = guess_list[0]  # Get first word
 
-        if not found_match:
-            found_guesses.append(None)  # Mark that no match was found
+            results.append({
+                "status": "not_found",
+                "requested": requested_pattern,
+                "alternatives": alternatives  # This will be {} if none are found
+            })
 
-    return found_guesses
+    return results
 
 
 # --- --- --- --- --- --- --- --- --- --- --- --- --- ---
@@ -91,41 +109,40 @@ def find_guesses_for_art(target_word, art_patterns, word_list):
 
 if __name__ == "__main__":
     # 1. GET YOUR WORD LIST
-    # This script NEEDS a word list file.
-    # Create a file named "wordle_list.txt" in the same directory.
-    # Add a large list of 5-letter words to it (one per line).
-    # You can find lists by searching "Wordle guess list" or "5-letter word list".
     ALL_WORDS = get_word_list("words.txt")
 
     # 2. SET YOUR TARGET WORD
-    # This is the "solution" word for your entire art piece.
-    # It MUST be 5 letters and uppercase.
     TARGET_WORD = "GUISE"
 
     # 3. DEFINE YOUR ART
-    # Create a list of 5-character strings.
-    # G = Green, Y = Yellow, B = Black/Gray
-    # Example: A simple 'H' shape
+    # B = Black, G = Green, Y = Yellow
     ART_TO_CREATE = [
         "YBYYY",  # Example: "CHILD"
         "YBYBB",  # Example: "MIGHT"
-        "YYBYY",  # Example: "RIGHT"
+        "YYYYY",  # Example: "RIGHT"
         "BBYBY",  # Example: "CHILD"
         "YYYBY"
     ]
 
     # --- Run the solver ---
-    guesses = find_guesses_for_art(TARGET_WORD, ART_TO_CREATE, ALL_WORDS)
+    final_guesses = find_guesses_for_art(TARGET_WORD, ART_TO_CREATE, ALL_WORDS)
 
     # --- Print the results ---
     print("--- 🎨 Your Wordle Art Plan ---")
     print(f"Target Word: {TARGET_WORD}\n")
 
-    for i, pattern in enumerate(ART_TO_CREATE):
-        guess = guesses[i]
-        if guess:
-            print(f"For pattern {pattern}, use guess: **{guess}**")
-        else:
-            print(f"For pattern {pattern}, **NO GUESS FOUND** in your word list.")
+    for result in final_guesses:
+        if result["status"] == "found":
+            print(f"✅ For pattern {result['requested']}, use guess: **{result['guess']}**")
 
-    print("\n--- Done ---")
+        elif result["status"] == "not_found":
+            print(f"❌ For pattern {result['requested']}, **NO GUESS FOUND**.")
+
+            if result["alternatives"]:
+                print("   **Did you mean one of these?** (off by 1 square)")
+                for alt_pattern, alt_guess in result["alternatives"].items():
+                    print(f"   - Pattern: {alt_pattern} (use guess: **{alt_guess}**)")
+            else:
+                print("   (No close alternatives were found either.)")
+
+        print("---")  # Separator
