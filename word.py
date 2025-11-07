@@ -43,7 +43,7 @@ while True:
 
         valid_words = []
 
-        with open("/usr/share/dict/words", "r") as f:
+        with open("words.txt", "r") as f:
             words = [word.strip().lower() for word in f if len(word.strip()) == 5 and word.strip().isalpha()]
 
         for word in words:
