@@ -10,14 +10,14 @@ if len(word_of_day) != 5 or not bool(re.match('^[abcdefghijklmnopqrstuvwxyz]+$',
 print("\nPut 'cancel' at any input to quit the program.")
 word = []
 word_letters = []
-def Check(type, id):
-    if type == "#":
-        if word[id] in word_letters:
+def check(char_type, char_id):
+    if char_type == "#":
+        if word[char_id] in word_letters:
             return True
         else:
             return False
     else:
-        if word[id] not in word_letters:
+        if word[char_id] not in word_letters:
             return True
         else:
             return False
@@ -58,7 +58,7 @@ while True:
 
             passes = 0
             for i in range(5):
-                if Check(art[i], i):
+                if check(art[i], i):
                     passes += 1
             if passes == 5:
                 valid_words.append(word)
